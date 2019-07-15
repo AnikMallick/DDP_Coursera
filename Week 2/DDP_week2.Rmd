@@ -1,0 +1,93 @@
+---
+title: 'Coursera_JHU_Developing-Data-Products_Week2'
+author: "Anik"
+date: ""
+output:
+    html_document:
+        keep_md: true
+---
+```{r,echo=FALSE,warning=FALSE,message=FALSE}
+# load libraries
+library(dplyr)
+library(lubridate)
+library(stringr)
+library(reshape2)
+
+library(leaflet)
+
+```
+
+# `r Sys.Date()`  
+
+```{r,cache=TRUE,echo=FALSE}
+#work with data
+
+## read the data
+df <- read.csv("repdata_data_StormData.csv.bz2",stringsAsFactors = FALSE)
+df <- tbl_df(df)
+
+## selecting the data
+df_new <- df %>% 
+    select(REFNUM, EVTYPE,BGN_DATE, FATALITIES, INJURIES, STATE) %>% 
+    mutate(BGN_DATE = mdy_hms(BGN_DATE)) %>% 
+    filter(year(BGN_DATE) >= 1996)
+
+## filtering non-killers :p
+logical <- (df_new$FATALITIES == 0 & df_new$INJURIES == 0)
+df_new <- df_new %>% filter(!logical)
+
+## keeping backup
+backup_df_new <- df_new
+
+# cleaning data
+df_new$EVTYPE = toupper(df_new$EVTYPE)
+df_new$EVTYPE = str_trim(df_new$EVTYPE)
+
+df_new[grep("TORNADO|LANDSPOUT",
+            df_new$EVTYPE),]$EVTYPE <- toupper("Tornado")
+
+## I am only interested in Tornado so lets filter it out
+df_new <- df_new %>% filter(EVTYPE == toupper("Tornado"))
+
+## reading state details
+df_state <- read.csv("statelatlong.csv")
+
+names(df_state) <- c("STATE",names(df_state)[-1])
+
+df_plot <- merge(df_new,df_state,by = "STATE")
+
+## lets selct the needed data for ploting
+df_plot <- df_plot %>% 
+    select(City,FATALITIES,INJURIES,Latitude,Longitude) %>% 
+    group_by(City) %>% 
+    summarise(TOTAL_FATALITIES = sum(FATALITIES),
+              TOTAL_INJURIES = sum(INJURIES),
+              LONG = mean(Longitude),
+              LAT = mean(Latitude)) %>% 
+    mutate(content = paste(sep = " | ", City,
+                           paste("Total Injuries : ",TOTAL_INJURIES),
+                           paste("Total fatalities : ",TOTAL_FATALITIES)))
+
+
+leaflet(df_plot) %>% 
+    setView(-96, 37.8, 4) %>% 
+    addTiles() %>%
+    addCircles(lng = ~LONG, lat = ~LAT,label= ~content, 
+               weight = 1,radius = ~TOTAL_INJURIES * 100, 
+               popup = ~City,color = "Blue") %>% 
+    addCircles(lng = ~LONG, lat = ~LAT, label= ~content, weight = 1,
+               radius = ~TOTAL_FATALITIES * 400, popup = ~City,color = "red") %>% 
+    addLegend(position = 'bottomleft',colors = c("blue","red"),
+              labels = c("Total Injuries","Total fatalities"), opacity = 1,
+              title = 'Legend')
+```
+  
+The above chart shows the total no of injuries and fatalities from Tornado’s in US from 1996 to 2011. It is clear that the south east region of US is most effected by Tornado than the rest of the country. 
+
+For more info check out my [Exploring the U.S. National Oceanic and Atmospheric Administration’s (NOAA) storm database](https://rpubs.com/Anik_Mallick/EDA_of_NOAA).  
+
+Data Source: [Storm Data [47Mb]](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2)  
+
+[USA lat,long for state abbreviations](https://www.kaggle.com/washimahmed/usa-latlong-for-state-abbreviations/downloads/usa-latlong-for-state-abbreviations.zip/1)
+
+Code for this analysis can be found here : [Code]
